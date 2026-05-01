@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+venv/
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Raw dataset - do not push to GitHub
+data
+data/raw/
+
+# Processed large files
+data/processed/
+
+# OS files
+.DS_Store
+Thumbs.db
