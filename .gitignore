@@ -8,7 +8,6 @@ __pycache__/
 *.pyc
 
 # Raw dataset - do not push to GitHub
-data
 data/raw/
 
 # Processed large files
