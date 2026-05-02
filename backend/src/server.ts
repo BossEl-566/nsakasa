@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { connectDB } from "./config/db.js";
 
 dotenv.config();
 
@@ -14,10 +15,17 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.json({
     message: "NsaKasa backend is running",
+    database: "connected",
     status: "ok",
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`NsaKasa backend running on port ${PORT}`);
-});
+async function startServer() {
+  await connectDB();
+
+  app.listen(PORT, () => {
+    console.log(`NsaKasa backend running on port ${PORT}`);
+  });
+}
+
+startServer();
