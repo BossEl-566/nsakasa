@@ -2,31 +2,13 @@ import re
 
 
 def format_label_piece(piece: str, title_case: bool = False):
-    """
-    Converts dataset label pieces into readable text.
-
-    Examples:
-    THANK_YOU -> thank you
-    TOM-BROWN -> tom brown
-    NUMBER_1_-_10 -> number 1 - 10
-    """
-
     range_token = "RANGETOKEN"
 
-    # Protect number ranges first.
     text = piece.replace("_-_", f" {range_token} ")
-
-    # Convert underscores to spaces.
     text = text.replace("_", " ")
-
-    # Convert normal hyphens to spaces.
-    # Example: TOM-BROWN -> TOM BROWN
     text = text.replace("-", " ")
-
-    # Restore protected number range dash.
     text = text.replace(range_token, "-")
 
-    # Clean spacing.
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"\s*-\s*", " - ", text).strip()
 
@@ -54,10 +36,8 @@ def clean_label(label: str):
     variant = None
     label_without_variant = label
 
-    # Do not treat number ranges like NUMBER_1_-_10 as variants.
     is_number_range = "_-_" in label
 
-    # Detect variants like WATER_2, CARRY_1, ONCE_1
     if not is_number_range:
         variant_match = re.match(r"^(.*)_(\d+)$", label)
 
@@ -65,7 +45,6 @@ def clean_label(label: str):
             label_without_variant = variant_match.group(1)
             variant = int(variant_match.group(2))
 
-    # Split meanings like WITHDRAWAL_OR_QUIT
     alias_parts = label_without_variant.split("_OR_")
 
     display_parts = [
@@ -84,12 +63,10 @@ def clean_label(label: str):
         alias = format_label_piece(part)
         aliases.append(alias)
 
-        # For number ranges, allow multiple search forms.
         if " - " in alias:
             aliases.append(alias.replace(" - ", " to "))
             aliases.append(alias.replace(" - ", " "))
 
-        # For variants, allow searching "water" and "water 2"
         if variant is not None:
             aliases.append(f"{alias} {variant}")
 
@@ -102,20 +79,3 @@ def clean_label(label: str):
         "baseWord": aliases[0] if aliases else "",
         "variant": variant,
     }
-
-
-test_labels = [
-    "WITHDRAWAL_OR_QUIT",
-    "DANGEROUS_OR_DANGER",
-    "WATER_2",
-    "CARRY_1",
-    "THANK_YOU",
-    "TOM-BROWN",
-    "NUMBER_1_-_10",
-    "NUMBER_11_-_20",
-    "THE_MANUAL_ALPHABET",
-    "COLD_OR_RUNNY_NOSE",
-]
-
-for label in test_labels:
-    print(clean_label(label))

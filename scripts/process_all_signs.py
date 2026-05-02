@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from label_cleaner import clean_label
 
 
 RAW_DATASET_PATH = Path("data/raw/GSL_openpose_data")
@@ -34,6 +35,7 @@ def convert_keypoints(flat_keypoints):
 
 def process_sign_folder(sign_folder: Path):
     sign_name = sign_folder.name
+    cleaned_label = clean_label(sign_name)
 
     output_folder = PROCESSED_DATASET_PATH / sign_name
     output_folder.mkdir(parents=True, exist_ok=True)
@@ -98,6 +100,10 @@ def process_sign_folder(sign_folder: Path):
 
     metadata = {
         "gloss": sign_name.upper(),
+        "displayName": cleaned_label["displayName"],
+        "aliases": cleaned_label["aliases"],
+        "baseWord": cleaned_label["baseWord"],
+        "variant": cleaned_label["variant"],
         "english": sign_name.lower().replace("_", " "),
         "sourceFolder": str(sign_folder),
         "videoFile": video_file_name,
