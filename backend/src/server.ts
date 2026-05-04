@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import path from "path";
 import { connectDB } from "./config/db.js";
 import signRoutes from "./routes/sign.routes.js";
+import translationRoutes from "./routes/translation.routes.js";
 
 dotenv.config();
 
@@ -23,8 +24,13 @@ const rawSignsPath = path.join(
 );
 
 app.use("/media/signs", express.static(rawSignsPath));
+app.use("/media/signs", express.static(rawSignsPath));
+// app.use("/media/poses", express.static(processedSignsPath));
 
 app.use("/api/signs", signRoutes);
+app.use("/api/translate", translationRoutes);
+
+
 
 app.get("/", (req, res) => {
   res.json({
