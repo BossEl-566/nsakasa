@@ -45,6 +45,29 @@ export default function SignDetailsScreen() {
     }
   }
 
+  function handlePlay() {
+    player.play();
+  }
+
+  function handlePause() {
+    player.pause();
+  }
+
+  function handleReplay() {
+    player.currentTime = 0;
+    player.play();
+  }
+
+  function handleSlowMotion() {
+    player.playbackRate = 0.5;
+    player.play();
+  }
+
+  function handleNormalSpeed() {
+    player.playbackRate = 1;
+    player.play();
+  }
+
   useEffect(() => {
     loadSign();
   }, [gloss]);
@@ -64,7 +87,9 @@ export default function SignDetailsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <Text style={styles.errorText}>{errorMessage || "Sign not found."}</Text>
+          <Text style={styles.errorText}>
+            {errorMessage || "Sign not found."}
+          </Text>
 
           <Pressable style={styles.backButton} onPress={() => router.back()}>
             <Text style={styles.backButtonText}>Go back</Text>
@@ -96,6 +121,32 @@ export default function SignDetailsScreen() {
           )}
         </View>
 
+        <View style={styles.controlsCard}>
+          <View style={styles.controlsRow}>
+            <Pressable style={styles.controlButton} onPress={handlePlay}>
+              <Text style={styles.controlButtonText}>Play</Text>
+            </Pressable>
+
+            <Pressable style={styles.controlButton} onPress={handlePause}>
+              <Text style={styles.controlButtonText}>Pause</Text>
+            </Pressable>
+
+            <Pressable style={styles.controlButtonPrimary} onPress={handleReplay}>
+              <Text style={styles.controlButtonPrimaryText}>Replay</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.controlsRowLast}>
+            <Pressable style={styles.controlButton} onPress={handleSlowMotion}>
+              <Text style={styles.controlButtonText}>0.5x Slow</Text>
+            </Pressable>
+
+            <Pressable style={styles.controlButton} onPress={handleNormalSpeed}>
+              <Text style={styles.controlButtonText}>1x Normal</Text>
+            </Pressable>
+          </View>
+        </View>
+
         <View style={styles.infoCard}>
           <Text style={styles.title}>{sign.displayName}</Text>
           <Text style={styles.gloss}>{sign.gloss}</Text>
@@ -118,6 +169,12 @@ export default function SignDetailsScreen() {
           <Text style={styles.label}>Pose Data</Text>
           <Text style={styles.valueSmall}>
             {sign.poseDataUrl ? "Available" : "Not available"}
+          </Text>
+
+          <Text style={styles.label}>Learning Tip</Text>
+          <Text style={styles.valueSmall}>
+            Use slow motion first, then replay the sign until the hand movement
+            feels familiar.
           </Text>
         </View>
       </ScrollView>
@@ -170,6 +227,49 @@ const styles = StyleSheet.create({
   videoFallbackText: {
     color: "#9fb0c7",
   },
+  controlsCard: {
+    backgroundColor: "#101b2d",
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#22324a",
+    marginBottom: 18,
+  },
+  controlsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+  },
+  controlsRowLast: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  controlButton: {
+    flex: 1,
+    backgroundColor: "#132238",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#263956",
+  },
+  controlButtonPrimary: {
+    flex: 1,
+    backgroundColor: "#7dd3fc",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  controlButtonText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  controlButtonPrimaryText: {
+    color: "#07111f",
+    fontSize: 13,
+    fontWeight: "900",
+  },
   infoCard: {
     backgroundColor: "#101b2d",
     borderRadius: 24,
@@ -211,6 +311,7 @@ const styles = StyleSheet.create({
     color: "#aab7cc",
     fontSize: 14,
     marginTop: 5,
+    lineHeight: 20,
   },
   center: {
     flex: 1,

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { router } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,43 +14,84 @@ import {
 
 import { fetchSigns } from "../../src/api/signs";
 import { Sign } from "../../src/types/sign";
-import { router } from "expo-router";
 
 export default function HomeScreen() {
   const [signs, setSigns] = useState<Sign[]>([]);
   const [search, setSearch] = useState("");
   const [totalSigns, setTotalSigns] = useState(0);
+
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState("");
 
-  async function loadSigns(searchText = search) {
+  const isFetchingRef = useRef(false);
+
+  async function loadSigns({
+    searchText = search,
+    nextPage = 1,
+    shouldReset = false,
+  }: {
+    searchText?: string;
+    nextPage?: number;
+    shouldReset?: boolean;
+  }) {
+    if (isFetchingRef.current) return;
+
     try {
+      isFetchingRef.current = true;
       setErrorMessage("");
+
+      if (shouldReset) {
+        setIsLoading(true);
+      }
 
       const data = await fetchSigns({
         search: searchText,
-        page: 1,
+        page: nextPage,
         limit: 20,
       });
 
-      setSigns(data.signs);
+      setSigns((currentSigns) => {
+        if (shouldReset || nextPage === 1) {
+          return data.signs;
+        }
+
+        return [...currentSigns, ...data.signs];
+      });
+
       setTotalSigns(data.total);
+      setPage(data.page);
+      setTotalPages(data.totalPages);
     } catch (error) {
       setErrorMessage("Unable to load signs. Check if backend is running.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
+      setIsLoadingMore(false);
+      isFetchingRef.current = false;
     }
   }
 
   useEffect(() => {
-    loadSigns("");
+    loadSigns({
+      searchText: "",
+      nextPage: 1,
+      shouldReset: true,
+    });
   }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      loadSigns(search);
+      loadSigns({
+        searchText: search,
+        nextPage: 1,
+        shouldReset: true,
+      });
     }, 400);
 
     return () => clearTimeout(timeout);
@@ -57,15 +99,32 @@ export default function HomeScreen() {
 
   async function handleRefresh() {
     setIsRefreshing(true);
-    await loadSigns(search);
+
+    await loadSigns({
+      searchText: search,
+      nextPage: 1,
+      shouldReset: true,
+    });
+  }
+
+  async function handleLoadMore() {
+    if (isLoading || isLoadingMore || page >= totalPages) return;
+
+    setIsLoadingMore(true);
+
+    await loadSigns({
+      searchText: search,
+      nextPage: page + 1,
+      shouldReset: false,
+    });
   }
 
   function renderSignItem({ item }: { item: Sign }) {
     return (
       <Pressable
-  style={styles.card}
-  onPress={() => router.push({ pathname: "/sign/[gloss]", params: { gloss: item.gloss } })}
->
+        style={styles.card}
+        onPress={() => router.push({ pathname: "/sign/[gloss]", params: { gloss: item.gloss } })}
+      >
         <View style={styles.cardHeader}>
           <Text style={styles.signName}>{item.displayName}</Text>
           <Text style={styles.frameText}>{item.totalFrames} frames</Text>
@@ -79,6 +138,27 @@ export default function HomeScreen() {
           </Text>
         )}
       </Pressable>
+    );
+  }
+
+  function renderFooter() {
+    if (!isLoadingMore) {
+      if (signs.length > 0 && page >= totalPages) {
+        return (
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>You have reached the end.</Text>
+          </View>
+        );
+      }
+
+      return null;
+    }
+
+    return (
+      <View style={styles.footer}>
+        <ActivityIndicator />
+        <Text style={styles.footerText}>Loading more signs...</Text>
+      </View>
     );
   }
 
@@ -100,9 +180,15 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.summaryRow}>
-        <Text style={styles.summaryText}>
-          {search ? `Results for "${search}"` : "All signs"}
-        </Text>
+        <View>
+          <Text style={styles.summaryText}>
+            {search ? `Results for "${search}"` : "All signs"}
+          </Text>
+          <Text style={styles.pageText}>
+            Page {page} of {totalPages}
+          </Text>
+        </View>
+
         <Text style={styles.summaryCount}>{totalSigns} total</Text>
       </View>
 
@@ -121,6 +207,9 @@ export default function HomeScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderSignItem}
           contentContainerStyle={styles.listContent}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={renderFooter}
           refreshControl={
             <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
           }
@@ -175,11 +264,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-end",
   },
   summaryText: {
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "700",
+  },
+  pageText: {
+    color: "#8190a7",
+    fontSize: 12,
+    marginTop: 4,
   },
   summaryCount: {
     color: "#7dd3fc",
@@ -223,6 +318,16 @@ const styles = StyleSheet.create({
   aliases: {
     color: "#8190a7",
     marginTop: 8,
+    fontSize: 13,
+  },
+  footer: {
+    paddingVertical: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  footerText: {
+    color: "#8190a7",
     fontSize: 13,
   },
   center: {
