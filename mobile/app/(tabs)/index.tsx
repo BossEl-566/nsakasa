@@ -168,7 +168,17 @@ export default function HomeScreen() {
         <Text style={styles.appName}>NsaKasa</Text>
         <Text style={styles.subtitle}>Ghanaian Sign Language Dictionary</Text>
       </View>
+<Pressable style={styles.learnCard} onPress={() => router.push("/learn")}>
+  <View>
+    <Text style={styles.learnLabel}>Beginner Mode</Text>
+    <Text style={styles.learnTitle}>Start Learning GSL</Text>
+    <Text style={styles.learnDescription}>
+      Learn basic signs for everyday communication.
+    </Text>
+  </View>
 
+  <Text style={styles.learnArrow}>→</Text>
+</Pressable>
       <View style={styles.searchBox}>
         <TextInput
           value={search}
@@ -349,4 +359,40 @@ const styles = StyleSheet.create({
     color: "#9fb0c7",
     fontSize: 15,
   },
+  learnCard: {
+  marginHorizontal: 20,
+  marginBottom: 16,
+  backgroundColor: "#0f2a3d",
+  borderRadius: 22,
+  padding: 18,
+  borderWidth: 1,
+  borderColor: "#1f5f7a",
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+},
+learnLabel: {
+  color: "#7dd3fc",
+  fontSize: 12,
+  fontWeight: "900",
+  textTransform: "uppercase",
+  letterSpacing: 1,
+},
+learnTitle: {
+  color: "#ffffff",
+  fontSize: 21,
+  fontWeight: "900",
+  marginTop: 6,
+},
+learnDescription: {
+  color: "#aab7cc",
+  fontSize: 14,
+  marginTop: 6,
+},
+learnArrow: {
+  color: "#7dd3fc",
+  fontSize: 28,
+  fontWeight: "900",
+},
 });
