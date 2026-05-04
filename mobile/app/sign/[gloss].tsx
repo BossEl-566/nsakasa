@@ -14,12 +14,18 @@ import { VideoView, useVideoPlayer } from "expo-video";
 
 import { fetchSignByGloss } from "../../src/api/signs";
 import { Sign } from "../../src/types/sign";
+import {
+  isSignPracticed,
+  markSignAsPracticed,
+  unmarkSignAsPracticed,
+} from "../../src/utils/progress";
 
 export default function SignDetailsScreen() {
   const { gloss } = useLocalSearchParams<{ gloss: string }>();
 
   const [sign, setSign] = useState<Sign | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPracticed, setIsPracticed] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const player = useVideoPlayer(sign?.videoUrl ?? "", (playerInstance) => {
@@ -37,12 +43,28 @@ export default function SignDetailsScreen() {
       setErrorMessage("");
 
       const data = await fetchSignByGloss(gloss);
+      const practicedStatus = await isSignPracticed(data.gloss);
+
       setSign(data);
+      setIsPracticed(practicedStatus);
     } catch (error) {
       setErrorMessage("Unable to load this sign.");
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function handleTogglePracticed() {
+    if (!sign) return;
+
+    if (isPracticed) {
+      await unmarkSignAsPracticed(sign.gloss);
+      setIsPracticed(false);
+      return;
+    }
+
+    await markSignAsPracticed(sign.gloss);
+    setIsPracticed(true);
   }
 
   function handlePlay() {
@@ -146,6 +168,21 @@ export default function SignDetailsScreen() {
             </Pressable>
           </View>
         </View>
+
+        <Pressable
+          style={isPracticed ? styles.practicedButton : styles.practiceButton}
+          onPress={handleTogglePracticed}
+        >
+          <Text
+            style={
+              isPracticed
+                ? styles.practicedButtonText
+                : styles.practiceButtonText
+            }
+          >
+            {isPracticed ? "Practiced ✓" : "Mark as Practiced"}
+          </Text>
+        </Pressable>
 
         <View style={styles.infoCard}>
           <Text style={styles.title}>{sign.displayName}</Text>
@@ -268,6 +305,32 @@ const styles = StyleSheet.create({
   controlButtonPrimaryText: {
     color: "#07111f",
     fontSize: 13,
+    fontWeight: "900",
+  },
+  practiceButton: {
+    backgroundColor: "#7dd3fc",
+    borderRadius: 18,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginBottom: 18,
+  },
+  practiceButtonText: {
+    color: "#07111f",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  practicedButton: {
+    backgroundColor: "#123826",
+    borderRadius: 18,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "#22c55e",
+  },
+  practicedButtonText: {
+    color: "#86efac",
+    fontSize: 15,
     fontWeight: "900",
   },
   infoCard: {

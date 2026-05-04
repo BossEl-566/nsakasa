@@ -1,5 +1,5 @@
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -12,6 +12,7 @@ import {
 
 import { fetchSignByGloss } from "../../src/api/signs";
 import { Sign } from "../../src/types/sign";
+import { getPracticedSigns } from "../../src/utils/progress";
 
 const BEGINNER_LESSON_SIGNS = [
   "THANK_YOU",
@@ -28,38 +29,45 @@ const BEGINNER_LESSON_SIGNS = [
 
 export default function LearnScreen() {
   const [signs, setSigns] = useState<Sign[]>([]);
+  const [practicedSigns, setPracticedSigns] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+
+  async function loadPracticedSigns() {
+    const savedPracticedSigns = await getPracticedSigns();
+    setPracticedSigns(savedPracticedSigns);
+  }
 
   async function loadLessonSigns() {
     try {
       setErrorMessage("");
 
       const results = await Promise.allSettled(
-  BEGINNER_LESSON_SIGNS.map((gloss) => fetchSignByGloss(gloss))
-);
+        BEGINNER_LESSON_SIGNS.map((gloss) => fetchSignByGloss(gloss))
+      );
 
-const successfulSigns: Sign[] = [];
-const failedSigns: string[] = [];
+      const successfulSigns: Sign[] = [];
+      const failedSigns: string[] = [];
 
-results.forEach((result, index) => {
-  const gloss = BEGINNER_LESSON_SIGNS[index];
+      results.forEach((result, index) => {
+        const gloss = BEGINNER_LESSON_SIGNS[index];
 
-  if (result.status === "fulfilled") {
-    successfulSigns.push(result.value);
-  } else {
-    failedSigns.push(gloss);
-  }
-});
+        if (result.status === "fulfilled") {
+          successfulSigns.push(result.value);
+        } else {
+          failedSigns.push(gloss);
+        }
+      });
 
-console.log("Failed beginner signs:", failedSigns);
+      console.log("Failed beginner signs:", failedSigns);
 
-if (successfulSigns.length === 0) {
-  setErrorMessage("No beginner lesson signs could be loaded.");
-  return;
-}
+      if (successfulSigns.length === 0) {
+        setErrorMessage("No beginner lesson signs could be loaded.");
+        return;
+      }
 
-setSigns(successfulSigns);
+      setSigns(successfulSigns);
+      await loadPracticedSigns();
     } catch (error) {
       setErrorMessage("Unable to load beginner lesson signs.");
     } finally {
@@ -71,21 +79,45 @@ setSigns(successfulSigns);
     loadLessonSigns();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadPracticedSigns();
+    }, [])
+  );
+
+  const practicedCount = signs.filter((sign) =>
+    practicedSigns.includes(sign.gloss)
+  ).length;
+
   function renderSignItem({ item, index }: { item: Sign; index: number }) {
+    const isPracticed = practicedSigns.includes(item.gloss);
+
     return (
       <Pressable
-        style={styles.card}
-        onPress={() => router.push({ pathname: "/sign/[gloss]", params: { gloss: item.gloss } })}
+        style={isPracticed ? styles.cardPracticed : styles.card}
+        onPress={() => router.push(`/sign/${item.gloss}`)}
       >
-        <View style={styles.numberBadge}>
-          <Text style={styles.numberText}>{index + 1}</Text>
+        <View style={isPracticed ? styles.numberBadgeDone : styles.numberBadge}>
+          <Text style={isPracticed ? styles.numberTextDone : styles.numberText}>
+            {isPracticed ? "✓" : index + 1}
+          </Text>
         </View>
 
         <View style={styles.cardContent}>
-          <Text style={styles.signName}>{item.displayName}</Text>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.signName}>{item.displayName}</Text>
+
+            {isPracticed && (
+              <Text style={styles.doneText}>Practiced</Text>
+            )}
+          </View>
+
           <Text style={styles.gloss}>{item.gloss}</Text>
+
           <Text style={styles.helperText}>
-            Tap to watch, replay, and practice slowly.
+            {isPracticed
+              ? "Good work. Tap to review this sign again."
+              : "Tap to watch, replay, and practice slowly."}
           </Text>
         </View>
       </Pressable>
@@ -131,11 +163,42 @@ setSigns(successfulSigns);
         </Text>
 
         <View style={styles.lessonInfoCard}>
-          <Text style={styles.lessonLabel}>Lesson 1</Text>
-          <Text style={styles.lessonTitle}>Basic Communication</Text>
+          <View style={styles.lessonTopRow}>
+            <View>
+              <Text style={styles.lessonLabel}>Lesson 1</Text>
+              <Text style={styles.lessonTitle}>Basic Communication</Text>
+            </View>
+
+            <View style={styles.progressBadge}>
+              <Text style={styles.progressText}>
+                {practicedCount}/{signs.length}
+              </Text>
+            </View>
+          </View>
+
           <Text style={styles.lessonDescription}>
             Learn simple signs for greeting, asking, responding, and expressing
             basic needs.
+          </Text>
+
+          <View style={styles.progressBarBackground}>
+            <View
+              style={[
+                styles.progressBarFill,
+                {
+                  width:
+                    signs.length > 0
+                      ? `${(practicedCount / signs.length) * 100}%`
+                      : "0%",
+                },
+              ]}
+            />
+          </View>
+
+          <Text style={styles.progressLabel}>
+            {practicedCount === signs.length
+              ? "Lesson completed. Great job."
+              : `${signs.length - practicedCount} signs left to practice.`}
           </Text>
         </View>
       </View>
@@ -194,6 +257,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#22324a",
   },
+  lessonTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 16,
+    alignItems: "flex-start",
+  },
   lessonLabel: {
     color: "#7dd3fc",
     fontSize: 13,
@@ -213,6 +282,36 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginTop: 8,
   },
+  progressBadge: {
+    backgroundColor: "#132238",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#263956",
+  },
+  progressText: {
+    color: "#7dd3fc",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  progressBarBackground: {
+    height: 10,
+    backgroundColor: "#132238",
+    borderRadius: 999,
+    overflow: "hidden",
+    marginTop: 18,
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: "#7dd3fc",
+    borderRadius: 999,
+  },
+  progressLabel: {
+    color: "#8190a7",
+    fontSize: 13,
+    marginTop: 10,
+  },
   listContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
@@ -227,6 +326,15 @@ const styles = StyleSheet.create({
     borderColor: "#22324a",
     gap: 14,
   },
+  cardPracticed: {
+    flexDirection: "row",
+    backgroundColor: "#0f241c",
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#22c55e",
+    gap: 14,
+  },
   numberBadge: {
     width: 38,
     height: 38,
@@ -235,18 +343,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  numberBadgeDone: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#22c55e",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   numberText: {
     color: "#07111f",
     fontSize: 16,
     fontWeight: "900",
   },
+  numberTextDone: {
+    color: "#052e16",
+    fontSize: 17,
+    fontWeight: "900",
+  },
   cardContent: {
     flex: 1,
+  },
+  cardTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "center",
   },
   signName: {
     color: "#ffffff",
     fontSize: 18,
     fontWeight: "900",
+    flex: 1,
+  },
+  doneText: {
+    color: "#86efac",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
   },
   gloss: {
     color: "#7dd3fc",
