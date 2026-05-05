@@ -7,6 +7,24 @@ type FetchSignsParams = {
   limit?: number;
 };
 
+async function fetchWithTimeout(url: string, timeoutMs = 10000) {
+  const controller = new AbortController();
+
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+    });
+
+    return response;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function fetchSigns({
   search = "",
   page = 1,
@@ -21,23 +39,37 @@ export async function fetchSigns({
     params.set("search", search.trim());
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/signs?${params}`);
+  const url = `${API_BASE_URL}/api/signs?${params.toString()}`;
+
+  console.log("Fetching signs from:", url);
+
+  const response = await fetchWithTimeout(url);
 
   if (!response.ok) {
-    throw new Error("Failed to fetch signs");
+    throw new Error(`Failed to fetch signs. Status: ${response.status}`);
   }
 
-  return response.json();
+  const data = await response.json();
+
+  console.log("Fetched signs:", data);
+
+  return data;
 }
 
 export async function fetchSignByGloss(gloss: string): Promise<Sign> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/signs/${encodeURIComponent(gloss)}`
-  );
+  const url = `${API_BASE_URL}/api/signs/${encodeURIComponent(gloss)}`;
+
+  console.log("Fetching sign by gloss from:", url);
+
+  const response = await fetchWithTimeout(url);
 
   if (!response.ok) {
-    throw new Error("Failed to fetch sign");
+    throw new Error(`Failed to fetch sign. Status: ${response.status}`);
   }
 
-  return response.json();
+  const data = await response.json();
+
+  console.log("Fetched sign:", data);
+
+  return data;
 }

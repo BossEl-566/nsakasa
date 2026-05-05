@@ -1,15 +1,15 @@
-import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { Href, Link } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
   RefreshControl,
   SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
+  Pressable,
 } from "react-native";
 
 import { fetchSigns } from "../../src/api/signs";
@@ -24,12 +24,13 @@ export default function HomeScreen() {
   const [totalPages, setTotalPages] = useState(1);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState("");
 
-  const isFetchingRef = useRef(false);
+  console.log("HomeScreen rendered with state:")
 
   async function loadSigns({
     searchText = search,
@@ -40,10 +41,13 @@ export default function HomeScreen() {
     nextPage?: number;
     shouldReset?: boolean;
   }) {
-    if (isFetchingRef.current) return;
-
     try {
-      isFetchingRef.current = true;
+      console.log("loadSigns started:", {
+        searchText,
+        nextPage,
+        shouldReset,
+      });
+
       setErrorMessage("");
 
       if (shouldReset) {
@@ -55,6 +59,8 @@ export default function HomeScreen() {
         page: nextPage,
         limit: 20,
       });
+
+      console.log("loadSigns received:", data);
 
       setSigns((currentSigns) => {
         if (shouldReset || nextPage === 1) {
@@ -68,24 +74,33 @@ export default function HomeScreen() {
       setPage(data.page);
       setTotalPages(data.totalPages);
     } catch (error) {
+      console.log("loadSigns error:", error);
       setErrorMessage("Unable to load signs. Check if backend is running.");
     } finally {
+      console.log("loadSigns finished");
       setIsLoading(false);
       setIsRefreshing(false);
       setIsLoadingMore(false);
-      isFetchingRef.current = false;
     }
   }
 
   useEffect(() => {
-    loadSigns({
-      searchText: "",
-      nextPage: 1,
-      shouldReset: true,
-    });
+    async function initialLoad() {
+      await loadSigns({
+        searchText: "",
+        nextPage: 1,
+        shouldReset: true,
+      });
+
+      setHasInitialLoaded(true);
+    }
+
+    initialLoad();
   }, []);
 
   useEffect(() => {
+    if (!hasInitialLoaded) return;
+
     const timeout = setTimeout(() => {
       loadSigns({
         searchText: search,
@@ -95,7 +110,7 @@ export default function HomeScreen() {
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [search]);
+  }, [search, hasInitialLoaded]);
 
   async function handleRefresh() {
     setIsRefreshing(true);
@@ -119,117 +134,172 @@ export default function HomeScreen() {
     });
   }
 
-  function renderSignItem({ item }: { item: Sign }) {
+  function renderHeader() {
     return (
-      <Pressable
-        style={styles.card}
-        onPress={() => router.push({ pathname: "/sign/[gloss]", params: { gloss: item.gloss } })}
-      >
-        <View style={styles.cardHeader}>
-          <Text style={styles.signName}>{item.displayName}</Text>
-          <Text style={styles.frameText}>{item.totalFrames} frames</Text>
+      <View>
+        <View style={styles.header}>
+          <Text style={styles.appName}>NsaKasa</Text>
+          <Text style={styles.subtitle}>Ghanaian Sign Language Dictionary</Text>
         </View>
 
-        <Text style={styles.gloss}>{item.gloss}</Text>
+        <Link href={"/avatar-test" as Href} asChild>
+          <Pressable style={styles.avatarCard}>
+            <View style={styles.cardTextBlock}>
+              <Text style={styles.avatarLabel}>3D Mode</Text>
+              <Text style={styles.avatarTitle}>Test 3D Avatar</Text>
+              <Text style={styles.avatarDescription}>
+                Confirm 3D rendering before loading the signing character.
+              </Text>
+            </View>
 
-        {item.aliases.length > 0 && (
-          <Text style={styles.aliases}>
-            Also searchable as: {item.aliases.join(", ")}
-          </Text>
-        )}
-      </Pressable>
+            <Text style={styles.avatarArrow}>→</Text>
+          </Pressable>
+        </Link>
+
+        <Link href={"/translate" as Href} asChild>
+          <Pressable style={styles.translateCard}>
+            <View style={styles.cardTextBlock}>
+              <Text style={styles.translateLabel}>Translation Mode</Text>
+              <Text style={styles.translateTitle}>Text to Sign</Text>
+              <Text style={styles.translateDescription}>
+                Type a simple phrase and match it to GSL signs.
+              </Text>
+            </View>
+
+            <Text style={styles.translateArrow}>→</Text>
+          </Pressable>
+        </Link>
+
+        <Link href={"/learn" as Href} asChild>
+          <Pressable style={styles.learnCard}>
+            <View style={styles.cardTextBlock}>
+              <Text style={styles.learnLabel}>Beginner Mode</Text>
+              <Text style={styles.learnTitle}>Start Learning GSL</Text>
+              <Text style={styles.learnDescription}>
+                Learn basic signs for everyday communication.
+              </Text>
+            </View>
+
+            <Text style={styles.learnArrow}>→</Text>
+          </Pressable>
+        </Link>
+
+        <View style={styles.searchBox}>
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search signs, e.g. about, quit, school"
+            placeholderTextColor="#8a94a6"
+            style={styles.searchInput}
+          />
+        </View>
+
+        <View style={styles.summaryRow}>
+          <View>
+            <Text style={styles.summaryText}>
+              {search ? `Results for "${search}"` : "All signs"}
+            </Text>
+
+            <Text style={styles.pageText}>
+              Page {page} of {totalPages}
+            </Text>
+          </View>
+
+          <Text style={styles.summaryCount}>{totalSigns} total</Text>
+        </View>
+      </View>
+    );
+  }
+
+  function renderSignItem({ item }: { item: Sign }) {
+    return (
+      <Link
+        href={{
+          pathname: "/sign/[gloss]",
+          params: { gloss: item.gloss },
+        }}
+        asChild
+      >
+        <Pressable style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.signName}>{item.displayName}</Text>
+            <Text style={styles.frameText}>{item.totalFrames} frames</Text>
+          </View>
+
+          <Text style={styles.gloss}>{item.gloss}</Text>
+
+          {item.aliases.length > 0 && (
+            <Text style={styles.aliases}>
+              Also searchable as: {item.aliases.join(", ")}
+            </Text>
+          )}
+        </Pressable>
+      </Link>
     );
   }
 
   function renderFooter() {
-    if (!isLoadingMore) {
-      if (signs.length > 0 && page >= totalPages) {
-        return (
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>You have reached the end.</Text>
-          </View>
-        );
-      }
+    if (isLoadingMore) {
+      return (
+        <View style={styles.footer}>
+          <ActivityIndicator />
+          <Text style={styles.footerText}>Loading more signs...</Text>
+        </View>
+      );
+    }
 
-      return null;
+    if (!isLoading && signs.length > 0 && page >= totalPages) {
+      return (
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>You have reached the end.</Text>
+        </View>
+      );
+    }
+
+    return null;
+  }
+
+  function renderEmptyState() {
+    if (isLoading) {
+      return (
+        <View style={styles.centerInList}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.loadingText}>Loading signs...</Text>
+        </View>
+      );
+    }
+
+    if (errorMessage) {
+      return (
+        <View style={styles.centerInList}>
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        </View>
+      );
     }
 
     return (
-      <View style={styles.footer}>
-        <ActivityIndicator />
-        <Text style={styles.footerText}>Loading more signs...</Text>
+      <View style={styles.centerInList}>
+        <Text style={styles.emptyText}>No signs found.</Text>
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.appName}>NsaKasa</Text>
-        <Text style={styles.subtitle}>Ghanaian Sign Language Dictionary</Text>
-      </View>
-<Pressable style={styles.learnCard} onPress={() => router.push("/learn")}>
-  <View>
-    <Text style={styles.learnLabel}>Beginner Mode</Text>
-    <Text style={styles.learnTitle}>Start Learning GSL</Text>
-    <Text style={styles.learnDescription}>
-      Learn basic signs for everyday communication.
-    </Text>
-  </View>
-
-  <Text style={styles.learnArrow}>→</Text>
-</Pressable>
-      <View style={styles.searchBox}>
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search signs, e.g. about, quit, school"
-          placeholderTextColor="#8a94a6"
-          style={styles.searchInput}
-        />
-      </View>
-
-      <View style={styles.summaryRow}>
-        <View>
-          <Text style={styles.summaryText}>
-            {search ? `Results for "${search}"` : "All signs"}
-          </Text>
-          <Text style={styles.pageText}>
-            Page {page} of {totalPages}
-          </Text>
-        </View>
-
-        <Text style={styles.summaryCount}>{totalSigns} total</Text>
-      </View>
-
-      {isLoading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.loadingText}>Loading signs...</Text>
-        </View>
-      ) : errorMessage ? (
-        <View style={styles.center}>
-          <Text style={styles.errorText}>{errorMessage}</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={signs}
-          keyExtractor={(item) => item.id}
-          renderItem={renderSignItem}
-          contentContainerStyle={styles.listContent}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.4}
-          ListFooterComponent={renderFooter}
-          refreshControl={
-            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-          }
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.emptyText}>No signs found.</Text>
-            </View>
-          }
-        />
-      )}
+      <FlatList
+        data={isLoading || errorMessage ? [] : signs}
+        keyExtractor={(item) => item.id}
+        renderItem={renderSignItem}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmptyState}
+        ListFooterComponent={renderFooter}
+        contentContainerStyle={styles.listContent}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.4}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -238,6 +308,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#07111f",
+  },
+  listContent: {
+    paddingBottom: 40,
   },
   header: {
     paddingHorizontal: 20,
@@ -254,6 +327,121 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: 4,
   },
+  cardTextBlock: {
+    flex: 1,
+  },
+
+  avatarCard: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: "#16251b",
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#22c55e",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 16,
+  },
+  avatarLabel: {
+    color: "#86efac",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  avatarTitle: {
+    color: "#ffffff",
+    fontSize: 21,
+    fontWeight: "900",
+    marginTop: 6,
+  },
+  avatarDescription: {
+    color: "#bbf7d0",
+    fontSize: 14,
+    marginTop: 6,
+  },
+  avatarArrow: {
+    color: "#86efac",
+    fontSize: 28,
+    fontWeight: "900",
+  },
+
+  translateCard: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: "#1f1738",
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#6d5dfc",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 16,
+  },
+  translateLabel: {
+    color: "#c4b5fd",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  translateTitle: {
+    color: "#ffffff",
+    fontSize: 21,
+    fontWeight: "900",
+    marginTop: 6,
+  },
+  translateDescription: {
+    color: "#c4b5fd",
+    fontSize: 14,
+    marginTop: 6,
+  },
+  translateArrow: {
+    color: "#c4b5fd",
+    fontSize: 28,
+    fontWeight: "900",
+  },
+
+  learnCard: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: "#0f2a3d",
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#1f5f7a",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 16,
+  },
+  learnLabel: {
+    color: "#7dd3fc",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  learnTitle: {
+    color: "#ffffff",
+    fontSize: 21,
+    fontWeight: "900",
+    marginTop: 6,
+  },
+  learnDescription: {
+    color: "#aab7cc",
+    fontSize: 14,
+    marginTop: 6,
+  },
+  learnArrow: {
+    color: "#7dd3fc",
+    fontSize: 28,
+    fontWeight: "900",
+  },
+
   searchBox: {
     marginHorizontal: 20,
     marginBottom: 16,
@@ -291,12 +479,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    gap: 12,
-  },
+
   card: {
+    marginHorizontal: 20,
+    marginBottom: 12,
     backgroundColor: "#101b2d",
     borderRadius: 18,
     padding: 16,
@@ -330,6 +516,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 13,
   },
+
   footer: {
     paddingVertical: 22,
     alignItems: "center",
@@ -340,8 +527,8 @@ const styles = StyleSheet.create({
     color: "#8190a7",
     fontSize: 13,
   },
-  center: {
-    flex: 1,
+  centerInList: {
+    paddingVertical: 60,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 24,
@@ -359,40 +546,4 @@ const styles = StyleSheet.create({
     color: "#9fb0c7",
     fontSize: 15,
   },
-  learnCard: {
-  marginHorizontal: 20,
-  marginBottom: 16,
-  backgroundColor: "#0f2a3d",
-  borderRadius: 22,
-  padding: 18,
-  borderWidth: 1,
-  borderColor: "#1f5f7a",
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 16,
-},
-learnLabel: {
-  color: "#7dd3fc",
-  fontSize: 12,
-  fontWeight: "900",
-  textTransform: "uppercase",
-  letterSpacing: 1,
-},
-learnTitle: {
-  color: "#ffffff",
-  fontSize: 21,
-  fontWeight: "900",
-  marginTop: 6,
-},
-learnDescription: {
-  color: "#aab7cc",
-  fontSize: 14,
-  marginTop: 6,
-},
-learnArrow: {
-  color: "#7dd3fc",
-  fontSize: 28,
-  fontWeight: "900",
-},
 });
