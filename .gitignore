@@ -16,3 +16,27 @@ data/processed/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Unity generated/cache folders
+NsaKasaUnity/[Ll]ibrary/
+NsaKasaUnity/[Tt]emp/
+NsaKasaUnity/[Oo]bj/
+NsaKasaUnity/[Bb]uild/
+NsaKasaUnity/[Bb]uilds/
+NsaKasaUnity/[Ll]ogs/
+NsaKasaUnity/[Uu]ser[Ss]ettings/
+NsaKasaUnity/[Mm]emoryCaptures/
+
+# Unity auto-generated project files
+NsaKasaUnity/*.csproj
+NsaKasaUnity/*.sln
+NsaKasaUnity/*.user
+NsaKasaUnity/*.pidb
+NsaKasaUnity/*.booproj
+NsaKasaUnity/*.svd
+NsaKasaUnity/*.pdb
+NsaKasaUnity/*.mdb
+NsaKasaUnity/sysinfo.txt
+
+# Keep Unity asset metadata
+!NsaKasaUnity/Assets/**/*.meta
