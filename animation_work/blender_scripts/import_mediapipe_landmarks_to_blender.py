@@ -10,7 +10,7 @@ import bpy
 
 PROJECT_ROOT = Path(r"C:\Users\Windows User\Desktop\Project\nsakasa\nsakasa")
 
-INPUT_JSON = PROJECT_ROOT / "animation_work" / "mediapipe_output" / "ABOUT_mediapipe_landmarks.json"
+INPUT_JSON = PROJECT_ROOT / "animation_work" / "mediapipe_output" / "THANK_YOU_mediapipe_landmarks.json"
 
 SCALE = 6.0
 DEPTH_SCALE = 2.0
