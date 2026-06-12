@@ -40,11 +40,21 @@ RIGHT_WRIST_INDEX = 16
 TARGET_COLLECTION_NAME = "NSA_IK_TARGETS"
 
 # Axis tuning
-DEPTH_SIGN = -1.0
+DEPTH_SIGN = 1.0
+
+# MediaPipe Y increases downward, while Blender Z increases upward.
 VERTICAL_SIGN = 1.0
+
 POLE_FORWARD_SIGN = -1.0
 
-# Small smoothing
+# Reduce forward/backward motion so the avatar does not lean
+# or stretch its arms too far toward the camera.
+DEPTH_MOTION_SCALE = 0.25
+
+# Use the first few frames as the relaxed calibration pose.
+CALIBRATION_FRAMES = 5
+
+# Small moving-average smoothing.
 SMOOTHING_RADIUS = 2
 
 # ------------------------------------------------------------
@@ -58,7 +68,7 @@ LEFT_HAND_ROT_Z = 0
 
 RIGHT_HAND_ROT_X = 0
 RIGHT_HAND_ROT_Y = 0
-RIGHT_HAND_ROT_Z = 180
+RIGHT_HAND_ROT_Z = 0
 # If this still looks wrong later, we will try:
 # RIGHT_HAND_ROT_X = 180
 # or RIGHT_HAND_ROT_Y = 180
@@ -88,15 +98,18 @@ def mediapipe_to_blender_vector(point):
       y = vertical
       z = depth
 
-    Blender coordinates used here:
+    Blender coordinates:
       X = horizontal
       Y = depth
       Z = vertical
     """
+
     return Vector(
         (
             float(point["x"]),
-            DEPTH_SIGN * float(point["z"]),
+            DEPTH_SIGN
+            * DEPTH_MOTION_SCALE
+            * float(point["z"]),
             VERTICAL_SIGN * float(point["y"]),
         )
     )
@@ -238,14 +251,25 @@ def reset_pose(armature):
         pose_bone.scale = (1.0, 1.0, 1.0)
 
 
-def add_ik_constraint(forearm_bone, wrist_target, elbow_pole, name):
+def add_ik_constraint(
+    forearm_bone,
+    wrist_target,
+    elbow_pole,
+    name,
+    pole_angle_degrees=0,
+):
     remove_old_nsa_constraints(forearm_bone)
 
     constraint = forearm_bone.constraints.new(type="IK")
     constraint.name = name
     constraint.target = wrist_target
     constraint.pole_target = elbow_pole
+
+    # Upper arm + forearm.
     constraint.chain_count = 2
+
+    # Correct the roll/twist direction of the arm chain.
+    constraint.pole_angle = radians(pole_angle_degrees)
 
     if hasattr(constraint, "use_stretch"):
         constraint.use_stretch = False
@@ -356,33 +380,168 @@ def main():
     left_elbow_positions = []
     right_elbow_positions = []
 
+    # --------------------------------------------------------
+    # AVATAR ARM LENGTHS
+    # --------------------------------------------------------
+    # The avatar FBX is in a T-pose, but we do not use that
+    # pose as the animation baseline.
+    #
+    # Instead, we use the avatar's arm lengths and reconstruct
+    # the arm pose from the signer's tracked directions:
+    #
+    # shoulder -> elbow -> wrist
+    # --------------------------------------------------------
+
+    avatar_left_upper_arm_length = (
+        armature.data.bones[left_arm_bone_name].length
+    )
+
+    avatar_left_forearm_length = (
+        armature.data.bones[left_forearm_bone_name].length
+    )
+
+    avatar_right_upper_arm_length = (
+        armature.data.bones[right_arm_bone_name].length
+    )
+
+    avatar_right_forearm_length = (
+        armature.data.bones[right_forearm_bone_name].length
+    )
+
+    avatar_left_shoulder_position = Vector(
+        armature.data.bones[left_arm_bone_name].head_local
+    )
+
+    avatar_right_shoulder_position = Vector(
+        armature.data.bones[right_arm_bone_name].head_local
+    )
+
+    def safe_normalized(vector, fallback):
+        if vector.length < 0.000001:
+            return fallback.copy()
+
+        return vector.normalized()
+
+    # Fallback directions only apply if MediaPipe produces
+    # an invalid frame.
+    fallback_left_upper_direction = Vector(
+        (-0.15, 0.0, -1.0)
+    ).normalized()
+
+    fallback_right_upper_direction = Vector(
+        (0.15, 0.0, -1.0)
+    ).normalized()
+
+    fallback_left_forearm_direction = Vector(
+        (-0.05, 0.0, -1.0)
+    ).normalized()
+
+    fallback_right_forearm_direction = Vector(
+        (0.05, 0.0, -1.0)
+    ).normalized()
+
     for frame_data in frames:
         signer_left_shoulder = mediapipe_to_blender_vector(
-            get_pose_world_point(frame_data, LEFT_SHOULDER_INDEX)
+            get_pose_world_point(
+                frame_data,
+                LEFT_SHOULDER_INDEX,
+            )
         )
 
         signer_right_shoulder = mediapipe_to_blender_vector(
-            get_pose_world_point(frame_data, RIGHT_SHOULDER_INDEX)
+            get_pose_world_point(
+                frame_data,
+                RIGHT_SHOULDER_INDEX,
+            )
         )
 
-        signer_shoulder_center = (
-            signer_left_shoulder + signer_right_shoulder
-        ) * 0.5
-
-        def map_relative_to_avatar(point_index):
-            source_point = mediapipe_to_blender_vector(
-                get_pose_world_point(frame_data, point_index)
+        signer_left_elbow = mediapipe_to_blender_vector(
+            get_pose_world_point(
+                frame_data,
+                LEFT_ELBOW_INDEX,
             )
+        )
 
-            relative = source_point - signer_shoulder_center
+        signer_right_elbow = mediapipe_to_blender_vector(
+            get_pose_world_point(
+                frame_data,
+                RIGHT_ELBOW_INDEX,
+            )
+        )
 
-            return avatar_shoulder_center + (relative * scale_factor)
+        signer_left_wrist = mediapipe_to_blender_vector(
+            get_pose_world_point(
+                frame_data,
+                LEFT_WRIST_INDEX,
+            )
+        )
 
-        left_elbow_positions.append(map_relative_to_avatar(LEFT_ELBOW_INDEX))
-        right_elbow_positions.append(map_relative_to_avatar(RIGHT_ELBOW_INDEX))
-        left_wrist_positions.append(map_relative_to_avatar(LEFT_WRIST_INDEX))
-        right_wrist_positions.append(map_relative_to_avatar(RIGHT_WRIST_INDEX))
+        signer_right_wrist = mediapipe_to_blender_vector(
+            get_pose_world_point(
+                frame_data,
+                RIGHT_WRIST_INDEX,
+            )
+        )
 
+        left_upper_direction = safe_normalized(
+            signer_left_elbow - signer_left_shoulder,
+            fallback_left_upper_direction,
+        )
+
+        right_upper_direction = safe_normalized(
+            signer_right_elbow - signer_right_shoulder,
+            fallback_right_upper_direction,
+        )
+
+        left_forearm_direction = safe_normalized(
+            signer_left_wrist - signer_left_elbow,
+            fallback_left_forearm_direction,
+        )
+
+        right_forearm_direction = safe_normalized(
+            signer_right_wrist - signer_right_elbow,
+            fallback_right_forearm_direction,
+        )
+
+        avatar_left_elbow_position = (
+            avatar_left_shoulder_position
+            + left_upper_direction
+            * avatar_left_upper_arm_length
+        )
+
+        avatar_right_elbow_position = (
+            avatar_right_shoulder_position
+            + right_upper_direction
+            * avatar_right_upper_arm_length
+        )
+
+        avatar_left_wrist_position = (
+            avatar_left_elbow_position
+            + left_forearm_direction
+            * avatar_left_forearm_length
+        )
+
+        avatar_right_wrist_position = (
+            avatar_right_elbow_position
+            + right_forearm_direction
+            * avatar_right_forearm_length
+        )
+
+        left_elbow_positions.append(
+            avatar_left_elbow_position
+        )
+
+        right_elbow_positions.append(
+            avatar_right_elbow_position
+        )
+
+        left_wrist_positions.append(
+            avatar_left_wrist_position
+        )
+
+        right_wrist_positions.append(
+            avatar_right_wrist_position
+        )
     left_elbow_positions = smooth_vectors(left_elbow_positions, SMOOTHING_RADIUS)
     right_elbow_positions = smooth_vectors(right_elbow_positions, SMOOTHING_RADIUS)
     left_wrist_positions = smooth_vectors(left_wrist_positions, SMOOTHING_RADIUS)
@@ -496,17 +655,19 @@ def main():
         )
 
     add_ik_constraint(
-        left_forearm,
-        left_wrist_target,
-        left_elbow_pole,
-        "NSA_LeftArmIK",
-    )
+    left_forearm,
+    left_wrist_target,
+    left_elbow_pole,
+    "NSA_LeftArmIK",
+    pole_angle_degrees=0,
+)
 
     add_ik_constraint(
         right_forearm,
         right_wrist_target,
         right_elbow_pole,
         "NSA_RightArmIK",
+        pole_angle_degrees=180,
     )
 
     scene.frame_set(1)
