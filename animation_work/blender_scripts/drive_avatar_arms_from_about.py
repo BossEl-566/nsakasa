@@ -56,6 +56,45 @@ CALIBRATION_FRAMES = 5
 
 # Small moving-average smoothing.
 SMOOTHING_RADIUS = 2
+# ------------------------------------------------------------
+# IDLE POSE AND ELBOW-SPACING TUNING
+# ------------------------------------------------------------
+
+# ------------------------------------------------------------
+# MANUALLY CALIBRATED IDLE POSE
+# ------------------------------------------------------------
+# These values were positioned manually in Blender.
+# They are armature-local coordinates.
+
+IDLE_HOLD_FRAMES = 12
+IDLE_TRANSITION_FRAMES = 12
+CALIBRATION_FRAMES = 5
+
+MANUAL_IDLE_LEFT_WRIST = Vector(
+    (35.636559, -68.657333, 34.475868)
+)
+
+MANUAL_IDLE_RIGHT_WRIST = Vector(
+    (-41.415791, -164.087494, 74.855721)
+)
+
+MANUAL_IDLE_LEFT_ELBOW_POLE = Vector(
+    (52.948975, 86.997810, -27.076185)
+)
+
+MANUAL_IDLE_RIGHT_ELBOW_POLE = Vector(
+    (-52.945328, 86.997887, -27.975361)
+)
+
+# Begin with arms naturally lowered before moving into the sign.
+IDLE_HOLD_FRAMES = 10
+IDLE_TRANSITION_FRAMES = 12
+
+# Push elbow pole targets outward so elbows do not enter the torso.
+ELBOW_POLE_OUTWARD_RATIO = 0.75
+
+# Keep the elbows bending in front of the body.
+ELBOW_POLE_FORWARD_RATIO = 1.40
 
 # ------------------------------------------------------------
 # TEMP HAND ROTATION FIX
@@ -137,6 +176,124 @@ def smooth_vectors(vectors, radius):
         smoothed.append(average_vectors(vectors[start:end]))
 
     return smoothed
+
+def average_first_vectors(vectors, count):
+    """
+    Average the first few tracked frames.
+    This becomes the source video's reference pose.
+    """
+
+    if not vectors:
+        raise ValueError("Cannot average an empty vector list.")
+
+    usable_count = min(count, len(vectors))
+
+    return average_vectors(
+        vectors[:usable_count]
+    )
+
+
+def apply_manual_baseline(
+    tracked_positions,
+    manual_idle_position,
+    calibration_frames,
+):
+    """
+    Preserve the tracked motion, but shift its baseline so that
+    frame 1 begins from the manually calibrated avatar pose.
+    """
+
+    tracked_reference = average_first_vectors(
+        tracked_positions,
+        calibration_frames,
+    )
+
+    return [
+        manual_idle_position
+        + (position - tracked_reference)
+        for position in tracked_positions
+    ]
+
+
+def prepend_idle_transition(
+    positions,
+    idle_position,
+    hold_frames,
+    transition_frames,
+):
+    """
+    Hold the manual idle pose briefly, then smoothly transition
+    into the extracted sign motion.
+    """
+
+    if not positions:
+        return []
+
+    result = []
+
+    for _ in range(hold_frames):
+        result.append(
+            idle_position.copy()
+        )
+
+    first_motion_position = positions[0]
+
+    for index in range(transition_frames):
+        amount = (
+            (index + 1)
+            / transition_frames
+        )
+
+        result.append(
+            idle_position.lerp(
+                first_motion_position,
+                amount,
+            )
+        )
+
+    result.extend(positions)
+
+    return result
+
+def prepend_idle_transition(
+    positions,
+    idle_position,
+    hold_frames,
+    transition_frames,
+):
+    """
+    Add an arms-down idle pose before the sign starts.
+
+    First:
+      hold the relaxed pose
+
+    Then:
+      smoothly blend into the first tracked sign pose
+    """
+
+    if not positions:
+        return []
+
+    result = []
+
+    for _ in range(hold_frames):
+        result.append(idle_position.copy())
+
+    first_sign_position = positions[0]
+
+    for index in range(transition_frames):
+        amount = (index + 1) / transition_frames
+
+        result.append(
+            idle_position.lerp(
+                first_sign_position,
+                amount,
+            )
+        )
+
+    result.extend(positions)
+
+    return result
 
 
 # ============================================================
@@ -346,6 +503,80 @@ def main():
         avatar_left_shoulder - avatar_right_shoulder
     ).length
 
+        # --------------------------------------------------------
+    # CREATE A NATURAL ARMS-DOWN IDLE POSE
+    # --------------------------------------------------------
+
+    down_direction = Vector((0.0, 0.0, -1.0))
+
+    left_outward_direction = (
+        avatar_left_shoulder
+        - avatar_shoulder_center
+    ).normalized()
+
+    right_outward_direction = (
+        avatar_right_shoulder
+        - avatar_shoulder_center
+    ).normalized()
+
+    avatar_left_upper_arm_length = (
+        armature.data.bones[left_arm_bone_name].length
+    )
+
+    avatar_right_upper_arm_length = (
+        armature.data.bones[right_arm_bone_name].length
+    )
+
+    avatar_left_forearm_length = (
+        armature.data.bones[left_forearm_bone_name].length
+    )
+
+    avatar_right_forearm_length = (
+        armature.data.bones[right_forearm_bone_name].length
+    )
+
+    # Lower the elbows beside the torso.
+    idle_left_elbow_position = (
+        avatar_left_shoulder
+        + left_outward_direction
+        * avatar_left_upper_arm_length
+        * 0.12
+        + down_direction
+        * avatar_left_upper_arm_length
+        * 0.92
+    )
+
+    idle_right_elbow_position = (
+        avatar_right_shoulder
+        + right_outward_direction
+        * avatar_right_upper_arm_length
+        * 0.12
+        + down_direction
+        * avatar_right_upper_arm_length
+        * 0.92
+    )
+
+    # Place the wrists lower beside the avatar's body.
+    idle_left_wrist_position = (
+        idle_left_elbow_position
+        + left_outward_direction
+        * avatar_left_forearm_length
+        * 0.08
+        + down_direction
+        * avatar_left_forearm_length
+        * 0.95
+    )
+
+    idle_right_wrist_position = (
+        idle_right_elbow_position
+        + right_outward_direction
+        * avatar_right_forearm_length
+        * 0.08
+        + down_direction
+        * avatar_right_forearm_length
+        * 0.95
+    )
+
     # Estimate signer shoulder width
     signer_shoulder_widths = []
 
@@ -547,6 +778,44 @@ def main():
     left_wrist_positions = smooth_vectors(left_wrist_positions, SMOOTHING_RADIUS)
     right_wrist_positions = smooth_vectors(right_wrist_positions, SMOOTHING_RADIUS)
 
+        # --------------------------------------------------------
+    # ADD IDLE POSE BEFORE THE SIGN MOTION
+    # --------------------------------------------------------
+
+    left_elbow_positions = prepend_idle_transition(
+        left_elbow_positions,
+        idle_left_elbow_position,
+        IDLE_HOLD_FRAMES,
+        IDLE_TRANSITION_FRAMES,
+    )
+
+    right_elbow_positions = prepend_idle_transition(
+        right_elbow_positions,
+        idle_right_elbow_position,
+        IDLE_HOLD_FRAMES,
+        IDLE_TRANSITION_FRAMES,
+    )
+
+    left_wrist_positions = prepend_idle_transition(
+        left_wrist_positions,
+        idle_left_wrist_position,
+        IDLE_HOLD_FRAMES,
+        IDLE_TRANSITION_FRAMES,
+    )
+
+    right_wrist_positions = prepend_idle_transition(
+        right_wrist_positions,
+        idle_right_wrist_position,
+        IDLE_HOLD_FRAMES,
+        IDLE_TRANSITION_FRAMES,
+    )
+
+    animation_frame_count = len(
+        left_wrist_positions
+    )
+
+    scene.frame_end = animation_frame_count
+
     target_collection = get_or_create_collection(TARGET_COLLECTION_NAME)
     clear_collection_objects(target_collection)
 
@@ -586,27 +855,106 @@ def main():
     ]:
         target.parent = armature
 
-    pole_offset = Vector(
-        (
-            0.0,
-            POLE_FORWARD_SIGN * avatar_shoulder_width * 2.0,
-            0.0,
-        )
+        # --------------------------------------------------------
+    # PUSH ELBOWS OUTWARD AND FORWARD
+    # --------------------------------------------------------
+
+        # --------------------------------------------------------
+    # USE THE MANUALLY CALIBRATED IDLE POSE AS THE BASELINE
+    # --------------------------------------------------------
+    #
+    # Wrist targets:
+    #   manual idle position + tracked wrist movement delta
+    #
+    # Elbow poles:
+    #   manual idle pole position + tracked elbow movement delta
+    #
+    # This avoids guessing the avatar's front/back orientation.
+
+    left_wrist_positions = apply_manual_baseline(
+        left_wrist_positions,
+        MANUAL_IDLE_LEFT_WRIST,
+        CALIBRATION_FRAMES,
     )
 
-    for index in range(len(frames)):
+    right_wrist_positions = apply_manual_baseline(
+        right_wrist_positions,
+        MANUAL_IDLE_RIGHT_WRIST,
+        CALIBRATION_FRAMES,
+    )
+
+    left_elbow_pole_positions = apply_manual_baseline(
+        left_elbow_positions,
+        MANUAL_IDLE_LEFT_ELBOW_POLE,
+        CALIBRATION_FRAMES,
+    )
+
+    right_elbow_pole_positions = apply_manual_baseline(
+        right_elbow_positions,
+        MANUAL_IDLE_RIGHT_ELBOW_POLE,
+        CALIBRATION_FRAMES,
+    )
+
+    # --------------------------------------------------------
+    # ADD A SHORT IDLE HOLD BEFORE THE SIGN STARTS
+    # --------------------------------------------------------
+
+    left_wrist_positions = prepend_idle_transition(
+        left_wrist_positions,
+        MANUAL_IDLE_LEFT_WRIST,
+        IDLE_HOLD_FRAMES,
+        IDLE_TRANSITION_FRAMES,
+    )
+
+    right_wrist_positions = prepend_idle_transition(
+        right_wrist_positions,
+        MANUAL_IDLE_RIGHT_WRIST,
+        IDLE_HOLD_FRAMES,
+        IDLE_TRANSITION_FRAMES,
+    )
+
+    left_elbow_pole_positions = prepend_idle_transition(
+        left_elbow_pole_positions,
+        MANUAL_IDLE_LEFT_ELBOW_POLE,
+        IDLE_HOLD_FRAMES,
+        IDLE_TRANSITION_FRAMES,
+    )
+
+    right_elbow_pole_positions = prepend_idle_transition(
+        right_elbow_pole_positions,
+        MANUAL_IDLE_RIGHT_ELBOW_POLE,
+        IDLE_HOLD_FRAMES,
+        IDLE_TRANSITION_FRAMES,
+    )
+
+    animation_frame_count = len(
+        left_wrist_positions
+    )
+
+    scene.frame_end = animation_frame_count
+
+    # --------------------------------------------------------
+    # INSERT IK TARGET KEYFRAMES
+    # --------------------------------------------------------
+
+    for index in range(animation_frame_count):
         blender_frame = index + 1
         scene.frame_set(blender_frame)
 
-        left_wrist_target.location = left_wrist_positions[index]
-        right_wrist_target.location = right_wrist_positions[index]
+        left_wrist_target.location = (
+            left_wrist_positions[index]
+        )
+
+        right_wrist_target.location = (
+            right_wrist_positions[index]
+        )
 
         left_elbow_pole.location = (
-            left_elbow_positions[index] + pole_offset
+            left_elbow_pole_positions[index]
         )
 
         right_elbow_pole.location = (
-            right_elbow_positions[index] + pole_offset
+            right_elbow_pole_positions[index]
         )
 
         left_wrist_target.keyframe_insert(
@@ -626,6 +974,33 @@ def main():
 
         right_elbow_pole.keyframe_insert(
             data_path="location",
+            frame=blender_frame,
+        )
+
+        # Keep the current neutral wrist settings for now.
+        # Real wrist direction will be added later using
+        # the MediaPipe hand landmarks.
+        apply_static_hand_rotation(
+            left_hand,
+            LEFT_HAND_ROT_X,
+            LEFT_HAND_ROT_Y,
+            LEFT_HAND_ROT_Z,
+        )
+
+        apply_static_hand_rotation(
+            right_hand,
+            RIGHT_HAND_ROT_X,
+            RIGHT_HAND_ROT_Y,
+            RIGHT_HAND_ROT_Z,
+        )
+
+        left_hand.keyframe_insert(
+            data_path="rotation_euler",
+            frame=blender_frame,
+        )
+
+        right_hand.keyframe_insert(
+            data_path="rotation_euler",
             frame=blender_frame,
         )
 
